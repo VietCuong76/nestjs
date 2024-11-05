@@ -1,0 +1,15 @@
+# Use postgres/example user/password credentials
+# version: '3'
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: nestjs
+    volumes:
+      - postgresqldata:/var/lib/postgresql/data
+volumes:
+  postgresqldata:
