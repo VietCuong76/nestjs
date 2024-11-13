@@ -1,11 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
-
-import { ResponseItem } from 'src/common/dtos/responeItem';
-import { User } from 'src/entities';
 import { Repository } from 'typeorm';
-import { CreateUserDto } from './dto/create-user.dto';
+
+import { Order } from 'src/common/constants/enum';
+import { PageMetaDto } from 'src/common/dtos/pageMeta.dto';
+import { PageOptionsDto } from 'src/common/dtos/pageOption';
+import { ResponseItem } from 'src/common/dtos/responeItem';
+import { ResponsePaginate } from 'src/common/dtos/responePaginate';
+import { User } from 'src/entities';
+import { CreateUserDto, ResponseListUser } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
@@ -17,32 +21,64 @@ export class UserService {
 
   async create(createUserDto: CreateUserDto) {
     try {
-      const user = new User();
-      user.fullName = createUserDto.fullName;
-      user.password = await bcrypt.hash(createUserDto.password, 10);
-      user.email = createUserDto.email;
-      const res = await this.userRepository.save(user);
+      const res = await this.userRepository.save({
+        ...createUserDto,
+        fullName: createUserDto.fullName,
+        password: await bcrypt.hash(createUserDto.password, 10),
+        email: createUserDto.email,
+      });
       return new ResponseItem(res, 'ADD_USER_SUCCESSFUL');
     } catch (error) {
-      console.error(error);
       return new ResponseItem(null, 'ADD_USER_FAILED');
     }
   }
 
-  async findAll() {
-    const users = await this.userRepository.find();
-    return new ResponseItem(users, 'LIST_ALL_USERS');
+  async findAll(
+    pageOptionsDto: PageOptionsDto,
+  ): Promise<ResponsePaginate<ResponseListUser>> {
+    try {
+      const data = this.userRepository
+        .createQueryBuilder('users')
+        .select(['users.email', 'users.fullName', 'users.id'])
+        .skip(pageOptionsDto.skip)
+        .take(pageOptionsDto.take)
+        .orderBy('users.createdAt', Order.DESC);
+      const [users, itemCount] = await data.getManyAndCount();
+      const metaData = new PageMetaDto({ pageOptionsDto, itemCount });
+      return new ResponsePaginate(users, metaData, 'LIST_ALL_USERS_FAILED');
+    } catch (error) {
+      throw error;
+    }
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: string) {
+    try {
+      const user = await this.userRepository.findOneBy({ id });
+      return new ResponseItem(user, 'LIST_USER_DETAIL');
+    } catch (error) {
+      throw new ResponseItem(null, 'LIST_USER_DETAIL_FAILED');
+    }
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    try {
+      const user = await this.userRepository.findOneBy({ id });
+      if (!user) return new BadRequestException('USER_DOES_NOT_EXIST');
+      await this.userRepository.update(id, updateUserDto);
+      return new ResponseItem(null, 'UPDATED_USER_SUCCESS');
+    } catch (error) {
+      throw new ResponseItem(null, 'UPDATED_USER_FAILED');
+    }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async remove(id: string) {
+    try {
+      const user = await this.userRepository.findOneBy({ id });
+      if (!user) return new BadRequestException('USER_DOES_NOT_EXIST');
+      await this.userRepository.delete(id);
+      return new ResponseItem(null, 'DELETED_USER_SUCCESS');
+    } catch (error) {
+      throw new ResponseItem(null, 'DELETED_USER_FAILED');
+    }
   }
 }
